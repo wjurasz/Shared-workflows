@@ -1,0 +1,135 @@
+name: Shared Terraform Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        required: true
+        type: string
+      aws_region:
+        required: true
+        type: string
+      action:
+        description: 'apply lub destroy'
+        required: true
+        type: string
+      # Zmienne opcjonalne dla projektów z Dockerem
+      enable_docker:
+        required: false
+        type: boolean
+        default: false
+      ecr_repository:
+        required: false
+        type: string
+      docker_context:
+        required: false
+        type: string
+
+permissions:
+  id-token: write 
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    if: inputs.action == 'apply'
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (Role-Plan)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::160450754443:role/Role-Plan
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init -lock=false
+
+      - name: Terraform Format
+        run: terraform fmt -check
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan -lock=false
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ inputs.working_directory }}/tfplan
+
+  apply:
+    runs-on: ubuntu-latest
+    needs: plan
+    if: inputs.action == 'apply'
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ inputs.working_directory }}
+
+      - name: Configure AWS Credentials (Role-Apply)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::160450754443:role/Role-Apply
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init -lock=false
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -lock=false tfplan
+
+      # KROKI OPCJONALNE - wykonają się tylko gdy projekt przekaże enable_docker: true
+      - name: Wait for ECR propagation
+        if: inputs.enable_docker == true
+        run: sleep 10
+
+      - name: Login to Amazon ECR
+        if: inputs.enable_docker == true
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Image
+        if: inputs.enable_docker == true
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ inputs.ecr_repository }}
+        run: |
+          docker build -f $GITHUB_WORKSPACE/${{ inputs.docker_context }}/dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:latest $GITHUB_WORKSPACE/${{ inputs.docker_context }}/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+  destroy:
+    runs-on: ubuntu-latest
+    if: inputs.action == 'destroy'
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::160450754443:role/Role-Apply
+          aws-region: ${{ inputs.aws_region }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init -lock=false
+      - run: terraform destroy -auto-approve -lock=false
