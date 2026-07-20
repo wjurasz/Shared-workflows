@@ -13,7 +13,6 @@ on:
         description: 'apply lub destroy'
         required: true
         type: string
-      # Zmienne opcjonalne dla projektów z Dockerem
       enable_docker:
         required: false
         type: boolean
