@@ -98,8 +98,7 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -lock=false tfplan
-
-      # KROKI OPCJONALNE - wykonają się tylko gdy projekt przekaże enable_docker: true
+        
       - name: Wait for ECR propagation
         if: inputs.enable_docker == true
         run: sleep 10
