@@ -10,7 +10,6 @@ on:
         required: true
         type: string
       action:
-        description: 'apply lub destroy'
         required: true
         type: string
       enable_docker:
@@ -31,7 +30,7 @@ permissions:
 jobs:
   plan:
     runs-on: ubuntu-latest
-    if: inputs.action == 'apply'
+    if: inputs.action == 'apply' || inputs.action == 'plan'
     defaults:
       run:
         working-directory: ${{ inputs.working_directory }}
@@ -49,7 +48,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform init -lock=false
+        run: terraform init
 
       - name: Terraform Format
         run: terraform fmt -check
@@ -58,7 +57,7 @@ jobs:
         run: terraform validate
 
       - name: Terraform Plan
-        run: terraform plan -out=tfplan -lock=false
+        run: terraform plan -out=tfplan
 
       - name: Upload Plan Artifact
         uses: actions/upload-artifact@v4
@@ -93,10 +92,10 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        run: terraform init -lock=false
+        run: terraform init
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve -lock=false tfplan
+        run: terraform apply -auto-approve tfplan
         
       - name: Wait for ECR propagation
         if: inputs.enable_docker == true
@@ -129,5 +128,5 @@ jobs:
           role-to-assume: arn:aws:iam::160450754443:role/Role-Apply
           aws-region: ${{ inputs.aws_region }}
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform init -lock=false
-      - run: terraform destroy -auto-approve -lock=false
+      - run: terraform init
+      - run: terraform destroy -auto-approve
