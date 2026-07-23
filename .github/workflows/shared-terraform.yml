@@ -112,7 +112,15 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ inputs.ecr_repository }}
         run: |
-          docker build -f $GITHUB_WORKSPACE/${{ inputs.docker_context }}/dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:latest $GITHUB_WORKSPACE/${{ inputs.docker_context }}/
+          CONTEXT_PATH="$GITHUB_WORKSPACE/${{ inputs.docker_context }}"
+          
+          if [ -f "$CONTEXT_PATH/dockerfile" ]; then
+            DOCKERFILE_PATH="$CONTEXT_PATH/dockerfile"
+          elif [ -f "$CONTEXT_PATH/Dockerfile" ]; then
+            DOCKERFILE_PATH="$CONTEXT_PATH/Dockerfile"
+          fi
+          
+          docker build -f "$DOCKERFILE_PATH" -t $ECR_REGISTRY/$ECR_REPOSITORY:latest "$CONTEXT_PATH/"
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
         
   destroy:
